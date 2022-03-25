@@ -6,7 +6,7 @@
   "iot_class": "cloud_polling",
   "codeowners": ["@kpofw"],
   "dependencies": [
-    "persistent_notification",
+    "persistent_notification"
   ],
   "requirements": [
   ]

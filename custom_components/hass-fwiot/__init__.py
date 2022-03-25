@@ -1,10 +1,11 @@
 """Support for the FWIOT devices."""
 from __future__ import annotations
 
-from functools import partial
-
-from requests.exceptions import ConnectTimeout, HTTPError
+import logging
 import voluptuous as vol
+
+from functools import partial
+from requests.exceptions import ConnectTimeout, HTTPError
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
@@ -24,6 +25,8 @@ from homeassistant.helpers.dispatcher import dispatcher_send
 
 from .const import ATTRIBUTION, CONF_POLLING, DEFAULT_CACHEDB, DOMAIN, LOGGER
 from .fwiot import FWIOTSystem, FWIOTAuto, FWIOTDev
+
+_LOGGER = logging.getLogger(__name__)
 
 SERVICE_SETTINGS = "change_setting"
 SERVICE_CAPTURE_IMAGE = "capture_image"
@@ -56,6 +59,7 @@ PLATFORMS = [
 ]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    _LOGGER.info('async_setup_entry')
     """Set up FWIOT integration from a config entry."""
     username = entry.data[CONF_USERNAME]
     password = entry.data[CONF_PASSWORD]
@@ -68,16 +72,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             entry, unique_id=entry.data[CONF_USERNAME]
         )
 
-    # try:
-    #     FWIOT = await hass.async_add_executor_job(
-    #         FWIOT, username, password, True, True, True, cache
-    #     )
+    try:
+        FWIOT = await hass.async_add_executor_job(
+            FWIOT, username, password, True, True, True, cache
+        )
 
-    # except FWIOTAuthenticationException as ex:
-    #     raise ConfigEntryAuthFailed(f"Invalid credentials: {ex}") from ex
-
-    # except (FWIOTException, ConnectTimeout, HTTPError) as ex:
-    #     raise ConfigEntryNotReady(f"Unable to connect to FWIOT: {ex}") from ex
+    except Exception as ex:
+        raise ConfigEntryAuthFailed(f"{ex}") from ex
 
     hass.data[DOMAIN] = FWIOTSystem(polling)
 
@@ -86,10 +87,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await setup_hass_events(hass)
     await hass.async_add_executor_job(setup_hass_services, hass)
     
+    _LOGGER.info('async_setup_entry done')
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    _LOGGER.info('async_unload_entry')
     """Unload a config entry."""
     hass.services.async_remove(DOMAIN, SERVICE_SETTINGS)
     hass.services.async_remove(DOMAIN, SERVICE_CAPTURE_IMAGE)
@@ -103,11 +106,13 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN].logout_listener()
     hass.data.pop(DOMAIN)
 
+    _LOGGER.info('async_unload_entry done')
     return unload_ok
 
 
 def setup_hass_services(hass: HomeAssistant) -> None:
     """Home Assistant services."""
+    _LOGGER.info('setup_hass_services')
 
     def change_setting(call: ServiceCall) -> None:
         """Change an FWIOT system setting."""
@@ -122,9 +127,11 @@ def setup_hass_services(hass: HomeAssistant) -> None:
     hass.services.register(
         DOMAIN, SERVICE_SETTINGS, change_setting, schema=CHANGE_SETTING_SCHEMA
     )
+    _LOGGER.info('setup_hass_services done')
 
 async def setup_hass_events(hass: HomeAssistant) -> None:
     """Home Assistant start and stop callbacks."""
+    _LOGGER.info('setup_hass_events')
 
     def logout(event: Event) -> None:
         """Logout of FWIOT."""
@@ -140,6 +147,7 @@ async def setup_hass_events(hass: HomeAssistant) -> None:
     hass.data[DOMAIN].logout_listener = hass.bus.async_listen_once(
         EVENT_HOMEASSISTANT_STOP, logout
     )
+    _LOGGER.info('setup_hass_events done')
 
 class FWIOTEntity(entity.Entity):
     """Representation of an FWIOT entity."""
@@ -147,6 +155,7 @@ class FWIOTEntity(entity.Entity):
     _attr_attribution = ATTRIBUTION
 
     def __init__(self, data: FWIOTSystem) -> None:
+        _LOGGER.info('FWIOTEntity init')
         """Initialize FWIOT entity."""
         self._data = data
         self._attr_should_poll = data.polling
@@ -177,6 +186,7 @@ class FWIOTDevice(FWIOTEntity):
     """Representation of an FWIOT device."""
 
     def __init__(self, data: FWIOTSystem, device: FWIOTDev) -> None:
+        _LOGGER.info('FWIOTDevice init')
         """Initialize FWIOT device."""
         super().__init__(data)
         self._device = device
@@ -232,6 +242,7 @@ class FWIOTAutomation(FWIOTEntity):
     """Representation of an FWIOT automation."""
 
     def __init__(self, data: FWIOTSystem, automation: FWIOTAuto) -> None:
+        _LOGGER.info('FWIOTAutomation init')
         """Initialize for FWIOT automation."""
         super().__init__(data)
         self._automation = automation
