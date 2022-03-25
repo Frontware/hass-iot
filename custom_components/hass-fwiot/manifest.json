@@ -7,7 +7,6 @@
   "codeowners": ["@kpofw"],
   "dependencies": [
     "persistent_notification",
-    "ffmpeg"
   ],
   "requirements": [
   ]
