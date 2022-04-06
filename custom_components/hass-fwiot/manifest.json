@@ -1,13 +1,12 @@
 {
-  "name": "FWIOT",
   "domain": "hass_fwiot",
-  "version": "0.0.1",
+  "name": "FWIOT",
   "config_flow": true,
-  "iot_class": "cloud_polling",
-  "codeowners": ["@kpofw"],
+  "requirements": [],
   "dependencies": [
     "persistent_notification"
   ],
-  "requirements": [
-  ]
+  "codeowners": ["@kpofw"],
+  "iot_class": "cloud_polling",
+  "version": "0.0.1"
 }

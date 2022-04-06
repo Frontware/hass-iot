@@ -1,257 +1,140 @@
-"""Support for the FWIOT devices."""
+"""The Detailed Hello World Push integration."""
 from __future__ import annotations
 
-import logging
-import voluptuous as vol
-
-from functools import partial
-from requests.exceptions import ConnectTimeout, HTTPError
-
+from homeassistant.core import HomeAssistant, callback, ServiceCall, Event
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import (
-    ATTR_DATE,
-    ATTR_DEVICE_ID,
-    ATTR_ENTITY_ID,
-    ATTR_TIME,
-    CONF_PASSWORD,
-    CONF_USERNAME,
-    EVENT_HOMEASSISTANT_STOP,
-    Platform,
-)
-from homeassistant.core import Event, HomeAssistant, ServiceCall
-from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
-from homeassistant.helpers import config_validation as cv, entity
+from homeassistant.const import CONF_HOST, CONF_TOKEN, Platform, EVENT_HOMEASSISTANT_STOP
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.helpers.dispatcher import dispatcher_send
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import ATTRIBUTION, CONF_POLLING, DEFAULT_CACHEDB, DOMAIN, LOGGER
-from .fwiot import FWIOTSystem, FWIOTAuto, FWIOTDev
+from . import fwiot
+from .const import DOMAIN, KEY_COORDINATOR, KEY_DEVICE,\
+                   LOGGER, POLLING_TIMEOUT_SEC, UPDATE_INTERVAL,\
+                   ATTR_SETTING, ATTR_VALUE, ATTR_ENTITY_ID,\
+                   SERVICE_SETTINGS, CHANGE_SETTING_SCHEMA,\
+                   SERVICE_CAPTURE_IMAGE, CAPTURE_IMAGE_SCHEMA,\
+                   SERVICE_TRIGGER_AUTOMATION, AUTOMATION_SCHEMA 
 
-_LOGGER = logging.getLogger(__name__)
-
-SERVICE_SETTINGS = "change_setting"
-SERVICE_CAPTURE_IMAGE = "capture_image"
-SERVICE_TRIGGER_AUTOMATION = "trigger_automation"
-
-ATTR_DEVICE_NAME = "device_name"
-ATTR_DEVICE_TYPE = "device_type"
-ATTR_EVENT_CODE = "event_code"
-ATTR_EVENT_NAME = "event_name"
-ATTR_EVENT_TYPE = "event_type"
-ATTR_EVENT_UTC = "event_utc"
-ATTR_SETTING = "setting"
-ATTR_USER_NAME = "user_name"
-ATTR_APP_TYPE = "app_type"
-ATTR_EVENT_BY = "event_by"
-ATTR_VALUE = "value"
-
-CONFIG_SCHEMA = cv.removed(DOMAIN, raise_if_present=False)
-
-CHANGE_SETTING_SCHEMA = vol.Schema(
-    {vol.Required(ATTR_SETTING): cv.string, vol.Required(ATTR_VALUE): cv.string}
-)
-
-CAPTURE_IMAGE_SCHEMA = vol.Schema({ATTR_ENTITY_ID: cv.entity_ids})
-
-AUTOMATION_SCHEMA = vol.Schema({ATTR_ENTITY_ID: cv.entity_ids})
-
-PLATFORMS = [
-    Platform.BINARY_SENSOR,
-]
+# List of platforms to support. There should be a matching .py file for each,
+# eg <cover.py> and <sensor.py>
+# PLATFORMS: list[str] = ["cover"]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    _LOGGER.info('async_setup_entry')
-    """Set up FWIOT integration from a config entry."""
-    username = entry.data[CONF_USERNAME]
-    password = entry.data[CONF_PASSWORD]
-    polling = entry.data[CONF_POLLING]
-    cache = hass.config.path(DEFAULT_CACHEDB)
+    """Set up FWIOT from a config entry."""
+    # Store an instance of the "connecting" class that does the work of speaking
+    # with your actual devices.
+    print('xxxxxxxxxxxxxxxxxxxxx')
+    print(entry.data.get('keys'))
+    print('xxxxxxxxxxxxxxxxxxxxx')
+    fwsys = fwiot.FWIOTSystem(hass)
+    fwsys.async_add_sensors = async_add_sensors
 
-    # For previous config entries where unique_id is None
-    if entry.unique_id is None:
-        hass.config_entries.async_update_entry(
-            entry, unique_id=entry.data[CONF_USERNAME]
-        )
+    if not DOMAIN in hass.data:
+       hass.data[DOMAIN] = fwsys
 
-    try:
-        FWIOT = await hass.async_add_executor_job(
-            FWIOT, username, password, True, True, True, cache
-        )
+    for each in entry.data.get('keys'):
+        if not each in fwsys.devices:
+           await hass.async_add_executor_job(fwsys.get_device, each)
 
-    except Exception as ex:
-        raise ConfigEntryAuthFailed(f"{ex}") from ex
+    for each in fwsys.devices:
+        fwsys.devices[each].coordinator = fwiot.FWIOTDataUpdateCoordinator(hass, fwsys.devices[each])
+        await fwsys.devices[each].coordinator.async_config_entry_first_refresh()
 
-    hass.data[DOMAIN] = FWIOTSystem(polling)
+    platforms = get_platforms(entry)
 
-    hass.config_entries.async_setup_platforms(entry, PLATFORMS)
+    #await async_create_device_and_coordinator(hass, entry)
+    entry.async_on_unload(entry.add_update_listener(update_listener))
+
+    hass.config_entries.async_setup_platforms(entry, platforms)
 
     await setup_hass_events(hass)
     await hass.async_add_executor_job(setup_hass_services, hass)
-    
-    _LOGGER.info('async_setup_entry done')
+
     return True
-
-
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    _LOGGER.info('async_unload_entry')
-    """Unload a config entry."""
-    hass.services.async_remove(DOMAIN, SERVICE_SETTINGS)
-    hass.services.async_remove(DOMAIN, SERVICE_CAPTURE_IMAGE)
-    hass.services.async_remove(DOMAIN, SERVICE_TRIGGER_AUTOMATION)
-
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-
-    await hass.async_add_executor_job(hass.data[DOMAIN].FWIOT.events.stop)
-    await hass.async_add_executor_job(hass.data[DOMAIN].FWIOT.logout)
-
-    hass.data[DOMAIN].logout_listener()
-    hass.data.pop(DOMAIN)
-
-    _LOGGER.info('async_unload_entry done')
-    return unload_ok
-
-
-def setup_hass_services(hass: HomeAssistant) -> None:
-    """Home Assistant services."""
-    _LOGGER.info('setup_hass_services')
-
-    def change_setting(call: ServiceCall) -> None:
-        """Change an FWIOT system setting."""
-        setting = call.data[ATTR_SETTING]
-        value = call.data[ATTR_VALUE]
-
-        try:
-            hass.data[DOMAIN].FWIOT.set_setting(setting, value)
-        except Exception as ex:
-            LOGGER.warning(ex)
-
-    hass.services.register(
-        DOMAIN, SERVICE_SETTINGS, change_setting, schema=CHANGE_SETTING_SCHEMA
-    )
-    _LOGGER.info('setup_hass_services done')
 
 async def setup_hass_events(hass: HomeAssistant) -> None:
     """Home Assistant start and stop callbacks."""
-    _LOGGER.info('setup_hass_events')
 
     def logout(event: Event) -> None:
-        """Logout of FWIOT."""
-        if not hass.data[DOMAIN].polling:
-            hass.data[DOMAIN].FWIOT.events.stop()
-
-        hass.data[DOMAIN].FWIOT.logout()
-        LOGGER.info("Logged out of FWIOT")
-
-    if not hass.data[DOMAIN].polling:
-        await hass.async_add_executor_job(hass.data[DOMAIN].FWIOT.events.start)
+         print('hass logout')
 
     hass.data[DOMAIN].logout_listener = hass.bus.async_listen_once(
         EVENT_HOMEASSISTANT_STOP, logout
     )
-    _LOGGER.info('setup_hass_events done')
 
-class FWIOTEntity(entity.Entity):
-    """Representation of an FWIOT entity."""
+def setup_hass_services(hass: HomeAssistant) -> None:
+    """Home Assistant services."""
 
-    _attr_attribution = ATTRIBUTION
+    def change_setting(call: ServiceCall) -> None:
+        """Change an system setting."""
+        print('change_setting')
+        pass
 
-    def __init__(self, data: FWIOTSystem) -> None:
-        _LOGGER.info('FWIOTEntity init')
-        """Initialize FWIOT entity."""
-        self._data = data
-        self._attr_should_poll = data.polling
+    def capture_image(call: ServiceCall) -> None:
+        """Capture a new image."""
+        print('capture_image')
+        pass
 
-    async def async_added_to_hass(self) -> None:
-        """Subscribe to FWIOT connection status updates."""
-        await self.hass.async_add_executor_job(
-            self._data.FWIOT.events.add_connection_status_callback,
-            self.unique_id,
-            self._update_connection_status,
-        )
+    def trigger_automation(call: ServiceCall) -> None:
+        """Trigger an automation."""
+        print('trigger_automation')
+        pass
 
-        self.hass.data[DOMAIN].entity_ids.add(self.entity_id)
+    hass.services.register(
+        DOMAIN, SERVICE_SETTINGS, change_setting, schema=CHANGE_SETTING_SCHEMA
+    )
 
-    async def async_will_remove_from_hass(self) -> None:
-        """Unsubscribe from FWIOT connection status updates."""
-        await self.hass.async_add_executor_job(
-            self._data.FWIOT.events.remove_connection_status_callback, self.unique_id
-        )
+    # hass.services.register(
+    #     DOMAIN, SERVICE_CAPTURE_IMAGE, capture_image, schema=CAPTURE_IMAGE_SCHEMA
+    # )
 
-    def _update_connection_status(self) -> None:
-        """Update the entity available property."""
-        self._attr_available = self._data.FWIOT.events.connected
-        self.schedule_update_ha_state()
+    # hass.services.register(
+    #     DOMAIN, SERVICE_TRIGGER_AUTOMATION, trigger_automation, schema=AUTOMATION_SCHEMA
+    # )
 
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Unload a config entry."""
+    # This is called when an entry/configured device is to be removed. The class
+    # needs to unload itself, and remove callbacks. See the classes for further
+    # details
+    hass.services.async_remove(DOMAIN, SERVICE_SETTINGS)
+    # hass.services.async_remove(DOMAIN, SERVICE_CAPTURE_IMAGE)
+    # hass.services.async_remove(DOMAIN, SERVICE_TRIGGER_AUTOMATION)
 
-class FWIOTDevice(FWIOTEntity):
-    """Representation of an FWIOT device."""
+    platforms = get_platforms(entry)
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, platforms)
+    
+    if DOMAIN in hass.data and hass.data[DOMAIN]:
+       hass.data[DOMAIN].logout_listener()
+       hass.data.pop(DOMAIN)
 
-    def __init__(self, data: FWIOTSystem, device: FWIOTDev) -> None:
-        _LOGGER.info('FWIOTDevice init')
-        """Initialize FWIOT device."""
-        super().__init__(data)
-        self._device = device
-        self._attr_name = device.name
-        self._attr_unique_id = device.device_uuid
+    return unload_ok
 
-    async def async_added_to_hass(self) -> None:
-        """Subscribe to device events."""
-        await super().async_added_to_hass()
-        await self.hass.async_add_executor_job(
-            self._data.FWIOT.events.add_device_callback,
-            self._device.device_id,
-            self._update_callback,
-        )
+@callback
+def get_platforms(config_entry):
+    """Return the platforms belonging to a config_entry."""
+    return ["sensor","binary_sensor"]
 
-    async def async_will_remove_from_hass(self) -> None:
-        """Unsubscribe from device events."""
-        await super().async_will_remove_from_hass()
-        await self.hass.async_add_executor_job(
-            self._data.FWIOT.events.remove_all_device_callbacks, self._device.device_id
-        )
+async def update_listener(hass: HomeAssistant, config_entry: ConfigEntry) -> None:
+    """Handle options update."""
+    print('xxxxxxxxxxx update_listener')
+    await hass.config_entries.async_reload(config_entry.entry_id)
 
-    def update(self) -> None:
-        """Update device state."""
-        self._device.refresh()
+def async_add_sensors(hass: HomeAssistant, async_add_entities: AddEntitiesCallback, validate_sensor_fn: any):
+    ''' validate and add sensor for device '''
+    sys: fwiot.FWIOTSystem = hass.data[DOMAIN]
 
-    @property
-    def extra_state_attributes(self) -> dict[str, str]:
-        """Return the state attributes."""
-        return {
-            "device_id": self._device.device_id,
-            "battery_low": self._device.battery_low,
-            "no_response": self._device.no_response,
-            "device_type": self._device.type,
-        }
+    devices = []
+    # Add all entities to HA
+    for each in sys.devices:        
 
-    @property
-    def device_info(self) -> entity.DeviceInfo:
-        """Return device registry information for this entity."""
-        return entity.DeviceInfo(
-            identifiers={(DOMAIN, self._device.device_id)},
-            manufacturer="FWIOT",
-            model=self._device.type,
-            name=self._device.name,
-        )
+        if not sys.devices[each].inited:    
+           devices.append(fwiot.FWIOTDeviceType(sys.devices[each]))
+           devices.append(fwiot.FWIOTDeviceStatus(sys.devices[each]))
+           devices.append(fwiot.FWIOTDeviceLastOnline(sys.devices[each]))
+           sys.devices[each].inited = True
 
-    def _update_callback(self, device: FWIOTDev) -> None:
-        """Update the device state."""
-        self.schedule_update_ha_state()
+        validate_sensor_fn(sys.devices[each], devices)
 
-
-class FWIOTAutomation(FWIOTEntity):
-    """Representation of an FWIOT automation."""
-
-    def __init__(self, data: FWIOTSystem, automation: FWIOTAuto) -> None:
-        _LOGGER.info('FWIOTAutomation init')
-        """Initialize for FWIOT automation."""
-        super().__init__(data)
-        self._automation = automation
-        self._attr_name = automation.name
-        self._attr_unique_id = automation.automation_id
-        self._attr_extra_state_attributes = {
-            "type": "CUE automation",
-        }
-
-    def update(self) -> None:
-        """Update automation state."""
-        self._automation.refresh()
+    async_add_entities(devices)

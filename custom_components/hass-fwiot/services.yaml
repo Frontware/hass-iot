@@ -1,0 +1,18 @@
+change_setting:
+  name: Change setting
+  description: Change an Abode system setting.
+  fields:
+    setting:
+      name: Setting
+      description: Setting to change.
+      required: true
+      example: beeper_mute
+      selector:
+        text:
+    value:
+      name: Value
+      description: Value of the setting.
+      required: true
+      example: "1"
+      selector:
+        text:
