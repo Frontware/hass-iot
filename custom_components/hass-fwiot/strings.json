@@ -10,6 +10,7 @@
       }
     },
     "error": {
+      "not_implement": "this device type has not implement",
       "invalid_api": "Invalid api key",
       "cannot_connect": "Failed to get status from iot server",
       "device_exist": "Device already added",
@@ -31,6 +32,7 @@
       }
     },
     "error": {
+      "not_implement": "this device has not implement",
       "invalid_api": "Invalid api key",
       "cannot_connect": "Failed to get status from iot server",
       "device_exist": "Device already added",

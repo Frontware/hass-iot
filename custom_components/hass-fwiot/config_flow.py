@@ -39,12 +39,13 @@ async def validate_input(hass: HomeAssistant, data: dict) -> dict[str, Any]:
     # `async_step_user` method below.
     _LOGGER.info(data)
     if len(data.get("api_key",'')) != 36:
-        raise InvalidAPIKey
+        raise ErrorInvalidAPIKey
     
     if not DOMAIN in hass.data:
        hass.data[DOMAIN] = FWIOTSystem(hass)
     
     fwsys:FWIOTSystem = hass.data[DOMAIN]   
+
     # The dummy hub provides a `test_connection` method to ensure it's working
     # as expected
     # result = await fwiot.test_connection()
@@ -62,8 +63,16 @@ async def validate_input(hass: HomeAssistant, data: dict) -> dict[str, Any]:
         fwsys.devices[ss].coordinator = FWIOTDataUpdateCoordinator(hass, fwsys.devices[ss])
         await fwsys.devices[ss].coordinator.async_config_entry_first_refresh()
 
-    except:
-        raise CannotConnect
+    except Exception as e:
+        print(e.args[0])
+        if e.args[0] == 1:
+           raise ErrorCannotConnect
+        elif e.args[0] == 2:
+           raise ErrorDeviceAlreadyExist
+        elif e.args[0] == 3:
+           raise ErrorDeviceNotImplement
+        elif e.args[0] == 4:
+           raise ErrorInvalidAPIData
 
     # If you cannot connect:
     # throw CannotConnect
@@ -104,13 +113,15 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 ks.append(user_input.get('api_key'))
 
                 return self.async_create_entry(title='Devices', data={"keys":ks})
-            except CannotConnect:
+            except ErrorCannotConnect:
                 errors["base"] = "cannot_connect"
-            except DeviceAlreadyExist:
+            except ErrorDeviceAlreadyExist:
                 errors["base"] = "device_exist"
-            except InvalidAPIData:
+            except ErrorInvalidAPIData:
                 errors["base"] = "invalid_api_data"
-            except InvalidAPIKey:
+            except ErrorDeviceNotImplement:
+                errors["base"] = "not_implement"
+            except ErrorInvalidAPIKey:
                 # The error string is set here, and should be translated.
                 # This example does not currently cover translations, see the
                 # comments on `DATA_SCHEMA` for further details.
@@ -130,17 +141,20 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def async_get_options_flow(entry: config_entries.ConfigEntry):
         return OptionsFlowHandler(entry)
 
-class CannotConnect(exceptions.HomeAssistantError):
+class ErrorCannotConnect(exceptions.HomeAssistantError):
     """Error to indicate we cannot connect."""
 
-class InvalidAPIData(exceptions.HomeAssistantError):
+class ErrorInvalidAPIData(exceptions.HomeAssistantError):
     """Error to indicate get wrong api data (no serial)."""
 
-class DeviceAlreadyExist(exceptions.HomeAssistantError):
+class ErrorDeviceAlreadyExist(exceptions.HomeAssistantError):
     """Error to indicate device already added."""
 
-class InvalidAPIKey(exceptions.HomeAssistantError):
+class ErrorInvalidAPIKey(exceptions.HomeAssistantError):
     """Error to indicate there is an invalid api key."""
+
+class ErrorDeviceNotImplement(exceptions.HomeAssistantError):
+    """Error to indicate there device has not implement."""
 
 class OptionsFlowHandler(config_entries.OptionsFlow):
     def __init__(self, config_entry: config_entries.ConfigEntry):
@@ -169,13 +183,15 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     self.hass.config_entries.async_reload(self.config_entry.entry_id)
                 )
                 return self.async_create_entry(title='Devices', data={"keys":ks})
-            except CannotConnect:
+            except ErrorCannotConnect:
                 errors["base"] = "cannot_connect"
-            except DeviceAlreadyExist:
+            except ErrorDeviceAlreadyExist:
                 errors["base"] = "device_exist"
-            except InvalidAPIData:
+            except ErrorInvalidAPIData:
                 errors["base"] = "invalid_api_data"
-            except InvalidAPIKey:
+            except ErrorDeviceNotImplement:
+                errors["base"] = "not_implement"
+            except ErrorInvalidAPIKey:
                 # The error string is set here, and should be translated.
                 # This example does not currently cover translations, see the
                 # comments on `DATA_SCHEMA` for further details.

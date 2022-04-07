@@ -26,6 +26,9 @@ CONF_POLLING = "polling"
 UPDATE_INTERVAL = timedelta(seconds=15)
 POLLING_TIMEOUT_SEC = 10
 
+
+DEVICES_READY = ['EMPDETECTOR', 'THERMIDITY']
+
 # Keys
 KEY_COORDINATOR = "coordinator"
 KEY_DEVICE = "device"

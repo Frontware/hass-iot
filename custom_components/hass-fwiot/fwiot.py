@@ -20,7 +20,7 @@ from homeassistant.helpers.aiohttp_client import (
     async_aiohttp_proxy_web,
     async_get_clientsession,
 )
-from .const import DOMAIN, LOGGER
+from .const import DOMAIN, LOGGER, DEVICES_READY
 
 class FWIOTDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Class to manage fetching AccuWeather data API."""
@@ -39,7 +39,7 @@ class FWIOTDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # of requests. We have 50 requests allowed per day, so we use 36 and leave 14 as
         # a reserve for restarting HA.
         update_interval = timedelta(seconds=10)
-        print("Data will be update every %s", update_interval)
+        print("Data will be update every %s" % update_interval)
 
         super().__init__(hass, LOGGER, name=DOMAIN, update_interval=update_interval)
 
@@ -58,13 +58,14 @@ class FWIOTDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 rets = await response.json()
                 ret = {}
                 if type(rets) is list:
+                   rets.reverse() 
                    for each in rets:
                        if each.get('data', False):
                           try: 
                              dd = json.loads(each.get('data')) 
                           except:
                              dd = {}  
-                          print(dd)  
+
                           if dd.get('status', False) and not ret.get('status',False):
                              ret['status'] = dd
                           elif dd and  not ret.get('data',False):
@@ -101,12 +102,19 @@ class FWIOTSystem:
         r = requests.get(url)
 
         if r.status_code != 200:
-           return Exception('Error connect: code %s' % r.status_code)
+           raise Exception(1,'Error connect: code %s' % r.status_code)
 
         rr = json.loads(r.content)
 
-        if api_key in self.devices:
-           return Exception('Serial already exist')
+        print(self.devices.keys())
+        if rr.get('serial') in self.devices:
+           raise Exception(2,'Serial already exist')
+
+        if not rr.get('device_type_code', False) in DEVICES_READY:
+           raise Exception(3,'This %s is not yet implement' % rr.get('device_type_code', False)) 
+        
+        if not rr.get('serial', False):
+           raise Exception(4, 'no serial found') 
 
         self.devices[rr.get('serial')] = FWIOTDevice(self, rr, api_key)
         return rr.get('serial')

@@ -10,9 +10,15 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.const import (
-    DEVICE_CLASS_TIMESTAMP
+    DEVICE_CLASS_TIMESTAMP,
+    TEMP_CELSIUS,
+    PERCENTAGE
 )
-
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorStateClass,
+)
 from .const import DOMAIN
 from . import async_add_sensors
 from .fwiot import FWIOTDevice, FWIOTEntity
@@ -32,6 +38,9 @@ def add_sensor_fn(device, rets):
     if device.type == 'EMPDETECTOR':
        rets.append(FWIOTEmployeeUpdate(device))
        rets.append(FWIOTEmployeeName(device))
+    elif device.type == 'THERMIDITY':
+       rets.append(FWIOTTemperature(device))
+       rets.append(FWIOTHumudity(device))
 
 class FWIOTEmployeeUpdate(FWIOTEntity):
     
@@ -72,3 +81,53 @@ class FWIOTEmployeeName(FWIOTEntity):
     @property
     def icon(self):
         return 'mdi:account-question'
+
+class FWIOTTemperature(FWIOTEntity):
+    """Representation of a Sensor."""
+
+    _attr_name = "Temperature"
+    _attr_native_unit_of_measurement = TEMP_CELSIUS
+    _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, device: FWIOTDevice) -> None:
+        super().__init__(device)
+        self._attr_unique_id = f"{self._device.unique_id}_temp"
+        self._temp = 0
+
+    @property
+    def unit_of_measurement(self):
+        return TEMP_CELSIUS
+
+    @property
+    def state(self):
+        """Return"""
+        return self._temp
+
+    async def async_update(self):
+        self._temp = self.coordinator.data.get('data', {}).get('temp', 0)
+
+class FWIOTHumudity(FWIOTEntity):
+    """Representation of a Sensor."""
+
+    _attr_name = "Humudity"
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_device_class = SensorDeviceClass.HUMIDITY
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, device: FWIOTDevice) -> None:
+        super().__init__(device)
+        self._attr_unique_id = f"{self._device.unique_id}_humid"
+        self._hum = 0
+
+    @property
+    def unit_of_measurement(self):
+        return PERCENTAGE
+
+    @property
+    def state(self):
+        """Return"""
+        return self._hum
+
+    async def async_update(self):
+        self._hum = self.coordinator.data.get('data', {}).get('hum', 0)
