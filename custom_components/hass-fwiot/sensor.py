@@ -19,7 +19,7 @@ from homeassistant.components.sensor import (
     SensorEntity,
     SensorStateClass,
 )
-from .const import DOMAIN
+from .const import DOMAIN, DEVICE_EMPDETECTOR, DEVICE_THERMIDITY
 from . import async_add_sensors
 from .fwiot import FWIOTDevice, FWIOTEntity
 
@@ -35,10 +35,10 @@ async def async_setup_entry(
 def add_sensor_fn(device, rets):
     ''' add sensors for employee detector '''
 
-    if device.type == 'EMPDETECTOR':
+    if device.type == DEVICE_EMPDETECTOR:
        rets.append(FWIOTEmployeeUpdate(device))
        rets.append(FWIOTEmployeeName(device))
-    elif device.type == 'THERMIDITY':
+    elif device.type == DEVICE_THERMIDITY:
        rets.append(FWIOTTemperature(device))
        rets.append(FWIOTHumudity(device))
 

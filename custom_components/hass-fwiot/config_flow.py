@@ -9,7 +9,9 @@ import voluptuous as vol
 from homeassistant import config_entries, exceptions
 from homeassistant.core import HomeAssistant, callback
 
-from .const import DOMAIN
+from .const import DOMAIN,\
+                   FIELD_API, FIELD_TYPE, FIELD_IP,\
+                   FLOWTYPE_FINGER, FLOWTYPE_IOT
 from .fwiot import FWIOTSystem, FWIOTDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -25,7 +27,6 @@ _LOGGER = logging.getLogger(__name__)
 # quite work as documented and always gave me the "Lokalise key references" string
 # (in square brackets), rather than the actual translated value. I did not attempt to
 # figure this out or look further into it.
-DATA_SCHEMA = vol.Schema({("api_key"): str})
 
 async def validate_input(hass: HomeAssistant, data: dict) -> dict[str, Any]:
     """Validate the user input allows us to connect.
@@ -37,8 +38,7 @@ async def validate_input(hass: HomeAssistant, data: dict) -> dict[str, Any]:
     # This is a simple example to show an error in the UI for a short hostname
     # The exceptions are defined at the end of this file, and are used in the
     # `async_step_user` method below.
-    _LOGGER.info(data)
-    if len(data.get("api_key",'')) != 36:
+    if len(data.get(FIELD_API,'')) != 36:
         raise ErrorInvalidAPIKey
     
     if not DOMAIN in hass.data:
@@ -58,13 +58,12 @@ async def validate_input(hass: HomeAssistant, data: dict) -> dict[str, Any]:
     # to the executor:
     try:
         ss = await hass.async_add_executor_job(
-            fwsys.get_device, data["api_key"]
+            fwsys.get_device, data[FIELD_API]
         )
         fwsys.devices[ss].coordinator = FWIOTDataUpdateCoordinator(hass, fwsys.devices[ss])
         await fwsys.devices[ss].coordinator.async_config_entry_first_refresh()
 
     except Exception as e:
-        print(e.args[0])
         if e.args[0] == 1:
            raise ErrorCannotConnect
         elif e.args[0] == 2:
@@ -85,6 +84,32 @@ async def validate_input(hass: HomeAssistant, data: dict) -> dict[str, Any]:
     # See `async_step_user` below for how this is used
     return
 
+async def validate_finger_ip(hass: HomeAssistant, data: dict) -> dict[str, Any]:
+    import re
+    
+    if not re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$",data.get(FIELD_IP,'')):
+       raise ErrorInvalidIP
+
+    if not DOMAIN in hass.data:
+       hass.data[DOMAIN] = FWIOTSystem(hass)
+    
+    fwsys:FWIOTSystem = hass.data[DOMAIN]   
+    try:
+        ss = await hass.async_add_executor_job(
+            fwsys.check_finger, data[FIELD_IP]
+        )
+        fwsys.devices[ss].coordinator = FWIOTDataUpdateCoordinator(hass, fwsys.devices[ss])
+        await fwsys.devices[ss].coordinator.async_config_entry_first_refresh()
+
+    except Exception as e:
+        print(e)
+        if e.args[0] == 2:
+           raise ErrorDeviceAlreadyExist
+        else:
+           raise ErrorCannotConnectFinger
+    
+    return
+
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for FWIOT."""
 
@@ -103,14 +128,31 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         # and when that has some validated input, it calls `async_create_entry` to
         # actually create the HA config entry. Note the "title" value is returned by
         # `validate_input` above.
+        if user_input is None:
+                return self.async_show_form(
+                    step_id="user",
+                    data_schema=vol.Schema({
+                        vol.Required(FIELD_TYPE, default=FLOWTYPE_IOT): vol.In(
+                            (
+                                FLOWTYPE_IOT,
+                                FLOWTYPE_FINGER,
+                            )
+                        )
+                    })
+                )
+
+        if user_input[FIELD_TYPE] == FLOWTYPE_FINGER:
+           return await self.async_step_finger()
+        return await self.async_step_iot()
+
+    async def async_step_iot(self, user_input=None):        
         errors = {}
         if user_input is not None:
-            
             try:
-                info = await validate_input(self.hass, user_input)
+                await validate_input(self.hass, user_input)
 
                 ks = []
-                ks.append(user_input.get('api_key'))
+                ks.append(user_input.get(FIELD_API))
 
                 return self.async_create_entry(title='Devices', data={"keys":ks})
             except ErrorCannotConnect:
@@ -130,12 +172,37 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             except Exception:  # pylint: disable=broad-except
                 _LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"
+        
+        # If there is no user input or there were errors, show the form again, including any errors that were found with the input.
+        return self.async_show_form(
+            step_id="iot", data_schema=vol.Schema({(FIELD_API): str}), errors=errors
+        )
+
+    async def async_step_finger(self, user_input=None):        
+        errors = {}
+        if user_input is not None:
+            
+            try:
+                await validate_finger_ip(self.hass, user_input)
+
+                ks = []
+                ks.append(user_input.get(FIELD_IP))
+
+                return self.async_create_entry(title='Devices', data={"keys":ks})
+            except ErrorInvalidIP:
+                errors["base"] = "invalid_ip"
+            except ErrorCannotConnectFinger:
+                errors["base"] = "cannot_connectf"
+            except ErrorDeviceAlreadyExist:
+                errors["base"] = "device_exist"
+            except Exception:  # pylint: disable=broad-except
+                _LOGGER.exception("Unexpected exception")
+                errors["base"] = "unknown"
 
         # If there is no user input or there were errors, show the form again, including any errors that were found with the input.
         return self.async_show_form(
-            step_id="user", data_schema=DATA_SCHEMA, errors=errors
+            step_id="finger", data_schema=vol.Schema({(FIELD_IP): str}), errors=errors
         )
-
     @staticmethod
     @callback
     def async_get_options_flow(entry: config_entries.ConfigEntry):
@@ -156,6 +223,12 @@ class ErrorInvalidAPIKey(exceptions.HomeAssistantError):
 class ErrorDeviceNotImplement(exceptions.HomeAssistantError):
     """Error to indicate there device has not implement."""
 
+class ErrorInvalidIP(exceptions.HomeAssistantError):
+    """Error to indicate invalid ip."""
+
+class ErrorCannotConnectFinger(exceptions.HomeAssistantError):
+    """Error to indicate we cannot connect fingerprint."""
+
 class OptionsFlowHandler(config_entries.OptionsFlow):
     def __init__(self, config_entry: config_entries.ConfigEntry):
         self.config_entry = config_entry
@@ -171,17 +244,36 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         # and when that has some validated input, it calls `async_create_entry` to
         # actually create the HA config entry. Note the "title" value is returned by
         # `validate_input` above.
+        if user_input is None:
+                return self.async_show_form(
+                    step_id="user",
+                    data_schema=vol.Schema({
+                        vol.Required(FIELD_TYPE, default=FLOWTYPE_IOT): vol.In(
+                            (
+                                FLOWTYPE_IOT,
+                                FLOWTYPE_FINGER,
+                            )
+                        )
+                    })
+                )
+
+        if user_input[FIELD_TYPE] == FLOWTYPE_FINGER:
+           return await self.async_step_finger()
+        return await self.async_step_iot()
+
+    async def async_step_iot(self, user_input=None):        
         errors = {}
         if user_input is not None:
-            
             try:
-                info = await validate_input(self.hass, user_input)
+                await validate_input(self.hass, user_input)
 
                 ks = self.config_entry.data.get('keys', [])
-                ks.append(user_input.get('api_key'))
+                ks.append(user_input.get(FIELD_API))
+
                 self.hass.async_create_task(
                     self.hass.config_entries.async_reload(self.config_entry.entry_id)
                 )
+
                 return self.async_create_entry(title='Devices', data={"keys":ks})
             except ErrorCannotConnect:
                 errors["base"] = "cannot_connect"
@@ -200,8 +292,36 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             except Exception:  # pylint: disable=broad-except
                 _LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"
+        
+        # If there is no user input or there were errors, show the form again, including any errors that were found with the input.
+        return self.async_show_form(
+            step_id="iot", data_schema=vol.Schema({(FIELD_API): str}), errors=errors
+        )
+
+    async def async_step_finger(self, user_input=None):        
+        errors = {}
+        if user_input is not None:
+            
+            try:
+                await validate_finger_ip(self.hass, user_input)
+
+                ks = []
+                ks.append(user_input.get(FIELD_API))
+
+                return self.async_create_entry(title='Devices', data={"keys":ks})
+            except ErrorInvalidIP:
+                errors["base"] = "invalid_ip"
+            except ErrorCannotConnect:
+                errors["base"] = "cannot_connect"
+            except ErrorDeviceAlreadyExist:
+                errors["base"] = "device_exist"
+            except ErrorCannotConnectFinger:
+                errors["base"] = "cannot_connectf"
+            except Exception:  # pylint: disable=broad-except
+                _LOGGER.exception("Unexpected exception")
+                errors["base"] = "unknown"
 
         # If there is no user input or there were errors, show the form again, including any errors that were found with the input.
         return self.async_show_form(
-            step_id="user", data_schema=DATA_SCHEMA, errors=errors
+            step_id="finger", data_schema=vol.Schema({(FIELD_IP): str}), errors=errors
         )

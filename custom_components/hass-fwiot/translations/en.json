@@ -2,17 +2,32 @@
   "config": {
     "step": {
       "user": {
+        "title": "Setup Frontware HASS Device",
+        "data": {
+          "type": "Select device type"
+        }
+      },
+      "iot": {
         "title": "Setup Frontware IOT Device",
         "description": "Enter your API Key from your document",
         "data": {
           "api_key": "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXX"
+        }
+      },
+      "finger": {
+        "title": "Setup Frontware FingerPrint",
+        "description": "Enter your fingerprint IP address",
+        "data": {
+          "finger_print_ip": "NNN.NNN.NNN.NNN"
         }
       }
     },
     "error": {
       "not_implement": "this device type has not implement",
       "invalid_api": "Invalid api key",
+      "invalid_ip": "Invalid IP address",
       "cannot_connect": "Failed to get status from iot server",
+      "cannot_connectf": "Failed to get data from fingerprint",
       "device_exist": "Device already added",
       "invalid_api_data": "Error get invalid api-data",
       "unknown": "Undefined error"
@@ -24,17 +39,32 @@
   "options": {
     "step": {
       "user": {
+        "title": "Setup Frontware HASS Device",
+        "data": {
+          "type": "Select device type"
+        }
+      },
+      "iot": {
         "title": "Setup Frontware IOT Device",
         "description": "Enter your API Key from your document",
         "data": {
           "api_key": "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXX"
         }
+      },
+      "finger": {
+        "title": "Setup Frontware FingerPrint",
+        "description": "Enter your fingerprint IP address",
+        "data": {
+          "finger_print_ip": "NNN.NNN.NNN.NNN"
+        }
       }
     },
     "error": {
       "invalid_api": "Invalid api key",
+      "invalid_ip": "Invalid IP address",
       "not_implement": "this device has not implement",
       "cannot_connect": "Failed to get status from iot server",
+      "cannot_connectf": "Failed to get data from fingerprint",
       "device_exist": "Device already added",
       "invalid_api_data": "Error get invalid api-data",
       "unknown": "Undefined error"

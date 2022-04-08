@@ -11,6 +11,7 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
     BinarySensorEntityDescription,
 )
+from .const import DEVICE_EMPDETECTOR, DEVICE_FINGER
 from . import async_add_sensors
 from .fwiot import FWIOTDevice, FWIOTEntity, FWIOTSystem
 
@@ -26,10 +27,11 @@ async def async_setup_entry(
 def add_sensor_fn(device, rets):
     ''' add sensors for binary detector '''
 
-    rets.append(FWIOTDeviceActive(device))
-    rets.append(FWIOTDeviceLock(device))      
+    if device.type != DEVICE_FINGER:
+       rets.append(FWIOTDeviceActive(device))
+       rets.append(FWIOTDeviceLock(device))      
 
-    if device.type == 'EMPDETECTOR':
+    if device.type == DEVICE_EMPDETECTOR:
        rets.append(FWIOTEmployeeFound(device))  
 
 class FWIOTDeviceActive(FWIOTEntity, BinarySensorEntity):

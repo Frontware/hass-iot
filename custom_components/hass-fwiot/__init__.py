@@ -35,7 +35,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     for each in entry.data.get('keys'):
         if not each in fwsys.devices:
-           await hass.async_add_executor_job(fwsys.get_device, each)
+           if len(each) == 36: 
+              await hass.async_add_executor_job(fwsys.get_device, each)
+           else:
+              await hass.async_add_executor_job(fwsys.check_finger, each)  
 
     for each in fwsys.devices:
         fwsys.devices[each].coordinator = fwiot.FWIOTDataUpdateCoordinator(hass, fwsys.devices[each])
@@ -131,8 +134,10 @@ def async_add_sensors(hass: HomeAssistant, async_add_entities: AddEntitiesCallba
 
         if not sys.devices[each].inited:    
            devices.append(fwiot.FWIOTDeviceType(sys.devices[each]))
-           devices.append(fwiot.FWIOTDeviceStatus(sys.devices[each]))
-           devices.append(fwiot.FWIOTDeviceLastOnline(sys.devices[each]))
+
+           if sys.devices[each].type != 'FINGER':
+              devices.append(fwiot.FWIOTDeviceStatus(sys.devices[each]))
+              devices.append(fwiot.FWIOTDeviceLastOnline(sys.devices[each]))
            sys.devices[each].inited = True
 
         validate_sensor_fn(sys.devices[each], devices)

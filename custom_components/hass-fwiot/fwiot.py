@@ -20,7 +20,10 @@ from homeassistant.helpers.aiohttp_client import (
     async_aiohttp_proxy_web,
     async_get_clientsession,
 )
-from .const import DOMAIN, LOGGER, DEVICES_READY
+from .const import DOMAIN, LOGGER, DEVICES_READY,\
+                   DEVICE_FINGER,\
+                   DEVICE_EMPDETECTOR,\
+                   DEVICE_THERMIDITY
 
 class FWIOTDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Class to manage fetching AccuWeather data API."""
@@ -95,6 +98,20 @@ class FWIOTSystem:
         self.devices = {}
         ''' serial devices '''
 
+    def check_finger(self, ip):
+        if ip != '192.168.1.65':
+           raise Exception(5,'Error connect: code %s' % ip)
+
+        if ip in self.devices:
+           raise Exception(2,'IP already exist')
+
+        self.devices[ip] = FWIOTDevice(self, {
+            'device_type_code': 'FINGER',
+            'device_type_name': 'Fingerprint',
+            'token': ip,
+            'serial':ip}, ip)
+        return ip   
+
     def get_device(self, api_key):
         ''' get device status '''
         
@@ -106,7 +123,6 @@ class FWIOTSystem:
 
         rr = json.loads(r.content)
 
-        print(self.devices.keys())
         if rr.get('serial') in self.devices:
            raise Exception(2,'Serial already exist')
 
@@ -265,4 +281,11 @@ class FWIOTDeviceType(FWIOTEntity):
 
     @property
     def icon(self):
-        return 'mdi:cast-audio-variant'
+        if self._device.type == DEVICE_FINGER:
+           return 'mdi:fingerprint'
+        elif self._device.type == DEVICE_EMPDETECTOR:
+           return 'mdi:motion-sensor'
+        elif self._device.type == DEVICE_THERMIDITY:
+           return 'mdi-thermometer-lines'
+        else:    
+           return 'mdi:cast-audio-variant'
