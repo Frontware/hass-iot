@@ -32,6 +32,12 @@ DEVICE_THERMIDITY = 'THERMIDITY'
 
 DEVICES_READY = [DEVICE_EMPDETECTOR, DEVICE_THERMIDITY]
 
+DEVICES_ICON = {
+    DEVICE_FINGER: 'mdi:fingerprint',
+    DEVICE_EMPDETECTOR: 'mdi:motion-sensor',
+    DEVICE_THERMIDITY: 'mdi:thermometer-lines',
+}
+
 # Keys
 KEY_COORDINATOR = "coordinator"
 KEY_DEVICE = "device"

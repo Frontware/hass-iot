@@ -21,6 +21,7 @@ from homeassistant.helpers.aiohttp_client import (
     async_get_clientsession,
 )
 from .const import DOMAIN, LOGGER, DEVICES_READY,\
+                   DEVICES_ICON,\
                    DEVICE_FINGER,\
                    DEVICE_EMPDETECTOR,\
                    DEVICE_THERMIDITY
@@ -213,7 +214,7 @@ class FWIOTEntity(CoordinatorEntity, Entity):
         """Return device registry information for this entity."""
         return DeviceInfo(
             identifiers={(DOMAIN, self._device.unique_id)},
-            manufacturer="Frontware IOT",
+            manufacturer="Frontware IOT" if self._device.type != DEVICE_FINGER else '',
             model=self._device.model,
             name=self._device.name,
             sw_version=self._device.version
@@ -281,11 +282,4 @@ class FWIOTDeviceType(FWIOTEntity):
 
     @property
     def icon(self):
-        if self._device.type == DEVICE_FINGER:
-           return 'mdi:fingerprint'
-        elif self._device.type == DEVICE_EMPDETECTOR:
-           return 'mdi:motion-sensor'
-        elif self._device.type == DEVICE_THERMIDITY:
-           return 'mdi-thermometer-lines'
-        else:    
-           return 'mdi:cast-audio-variant'
+        return DEVICES_ICON.get(self._device.type, 'mdi:cast-audio-variant')
