@@ -10,7 +10,7 @@ from homeassistant import config_entries, exceptions
 from homeassistant.core import HomeAssistant, callback
 
 from .const import DOMAIN,\
-                   FIELD_API, FIELD_TYPE, FIELD_IP,\
+                   FIELD_API, FIELD_TYPE, FIELD_IP, FIELD_PORT,\
                    FLOWTYPE_FINGER, FLOWTYPE_IOT
 from .fwiot import FWIOTSystem, FWIOTDataUpdateCoordinator
 
@@ -90,13 +90,16 @@ async def validate_finger_ip(hass: HomeAssistant, data: dict) -> dict[str, Any]:
     if not re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$",data.get(FIELD_IP,'')):
        raise ErrorInvalidIP
 
+    if not data.get(FIELD_PORT,0):
+       raise ErrorInvalidPort 
+
     if not DOMAIN in hass.data:
        hass.data[DOMAIN] = FWIOTSystem(hass)
     
     fwsys:FWIOTSystem = hass.data[DOMAIN]   
     try:
         ss = await hass.async_add_executor_job(
-            fwsys.check_finger, data[FIELD_IP]
+            fwsys.check_finger, data[FIELD_IP], data[FIELD_PORT]
         )
         fwsys.devices[ss].coordinator = FWIOTDataUpdateCoordinator(hass, fwsys.devices[ss])
         await fwsys.devices[ss].coordinator.async_config_entry_first_refresh()
@@ -151,8 +154,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             try:
                 await validate_input(self.hass, user_input)
 
-                ks = []
-                ks.append(user_input.get(FIELD_API))
+                ks = {user_input.get(FIELD_API):{
+                    'type':'iot'
+                }}
 
                 return self.async_create_entry(title='Devices', data={"keys":ks})
             except ErrorCannotConnect:
@@ -185,12 +189,16 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             try:
                 await validate_finger_ip(self.hass, user_input)
 
-                ks = []
-                ks.append(user_input.get(FIELD_IP))
+                ks = {user_input.get(FIELD_IP):{
+                    'type':'finger',
+                    'port': user_input.get(FIELD_PORT)
+                }}
 
                 return self.async_create_entry(title='Devices', data={"keys":ks})
             except ErrorInvalidIP:
                 errors["base"] = "invalid_ip"
+            except ErrorInvalidPort:
+                errors["base"] = "invalid_port"
             except ErrorCannotConnectFinger:
                 errors["base"] = "cannot_connectf"
             except ErrorDeviceAlreadyExist:
@@ -201,7 +209,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         # If there is no user input or there were errors, show the form again, including any errors that were found with the input.
         return self.async_show_form(
-            step_id="finger", data_schema=vol.Schema({(FIELD_IP): str}), errors=errors
+            step_id="finger", data_schema=vol.Schema({(FIELD_IP): str, (FIELD_PORT): int}), errors=errors
         )
     @staticmethod
     @callback
@@ -225,6 +233,9 @@ class ErrorDeviceNotImplement(exceptions.HomeAssistantError):
 
 class ErrorInvalidIP(exceptions.HomeAssistantError):
     """Error to indicate invalid ip."""
+
+class ErrorInvalidPort(exceptions.HomeAssistantError):
+    """Error to indicate invalid port."""
 
 class ErrorCannotConnectFinger(exceptions.HomeAssistantError):
     """Error to indicate we cannot connect fingerprint."""
@@ -267,8 +278,8 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             try:
                 await validate_input(self.hass, user_input)
 
-                ks = self.config_entry.data.get('keys', [])
-                ks.append(user_input.get(FIELD_API))
+                ks = self.config_entry.data.get('keys', {})
+                ks[user_input.get(FIELD_API)]={'type':'iot'}
 
                 self.hass.async_create_task(
                     self.hass.config_entries.async_reload(self.config_entry.entry_id)
@@ -305,12 +316,17 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             try:
                 await validate_finger_ip(self.hass, user_input)
 
-                ks = []
-                ks.append(user_input.get(FIELD_API))
+                ks = self.config_entry.data.get('keys', {})
+                ks[user_input.get(FIELD_IP)]={
+                    'type':'finger',
+                    'port': user_input.get(FIELD_PORT)
+                }
 
                 return self.async_create_entry(title='Devices', data={"keys":ks})
             except ErrorInvalidIP:
                 errors["base"] = "invalid_ip"
+            except ErrorInvalidPort:
+                errors["base"] = "invalid_port"
             except ErrorCannotConnect:
                 errors["base"] = "cannot_connect"
             except ErrorDeviceAlreadyExist:
@@ -323,5 +339,5 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
         # If there is no user input or there were errors, show the form again, including any errors that were found with the input.
         return self.async_show_form(
-            step_id="finger", data_schema=vol.Schema({(FIELD_IP): str}), errors=errors
+            step_id="finger", data_schema=vol.Schema({(FIELD_IP): str, (FIELD_PORT): int}), errors=errors
         )

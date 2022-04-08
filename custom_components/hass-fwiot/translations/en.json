@@ -18,14 +18,16 @@
         "title": "Setup Frontware FingerPrint",
         "description": "Enter your fingerprint IP address",
         "data": {
-          "finger_print_ip": "NNN.NNN.NNN.NNN"
+          "finger_print_ip": "NNN.NNN.NNN.NNN",
+          "finger_print_port": "Port"
         }
       }
     },
     "error": {
       "not_implement": "this device type has not implement",
       "invalid_api": "Invalid api key",
-      "invalid_ip": "Invalid IP address",
+      "invalid_ip": "Invalid machine IP address",
+      "invalid_port": "Invalid machine port",
       "cannot_connect": "Failed to get status from iot server",
       "cannot_connectf": "Failed to get data from fingerprint",
       "device_exist": "Device already added",
@@ -55,13 +57,15 @@
         "title": "Setup Frontware FingerPrint",
         "description": "Enter your fingerprint IP address",
         "data": {
-          "finger_print_ip": "NNN.NNN.NNN.NNN"
+          "finger_print_ip": "NNN.NNN.NNN.NNN",
+          "finger_print_port": "Port"
         }
       }
     },
     "error": {
       "invalid_api": "Invalid api key",
-      "invalid_ip": "Invalid IP address",
+      "invalid_ip": "Invalid machine IP address",
+      "invalid_port": "Invalid machine port",
       "not_implement": "this device has not implement",
       "cannot_connect": "Failed to get status from iot server",
       "cannot_connectf": "Failed to get data from fingerprint",

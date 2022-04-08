@@ -26,6 +26,8 @@ from .const import DOMAIN, LOGGER, DEVICES_READY,\
                    DEVICE_EMPDETECTOR,\
                    DEVICE_THERMIDITY
 
+from .finger.finger import finger_reader
+
 class FWIOTDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Class to manage fetching AccuWeather data API."""
 
@@ -46,9 +48,35 @@ class FWIOTDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         print("Data will be update every %s" % update_interval)
 
         super().__init__(hass, LOGGER, name=DOMAIN, update_interval=update_interval)
-
+    
     async def _async_update_data(self) -> dict[str, Any]:
         """Update data via library."""
+
+        if self._device.type == DEVICE_FINGER:
+           return self._async_get_finger() 
+        else:
+           return self._async_get_fwiot()
+
+    async def _async_get_finger(self) -> dict[str, Any]:
+        print(self._device._raw.get('port', 0))
+        print(self._device._raw.get('serial', 0))
+        if self._device._raw.get('port', 0):
+           return
+        if self._device._raw.get('serial', ''):
+           return
+
+        fk_reader = finger_reader()
+        fk_reader.port = self._device._raw.get('port',0)
+        fk_reader.host = self._device._raw.get('serial','')
+
+        fk_reader.mode = 'new'
+        try:
+            async with async_timeout.timeout(10):
+                print(await fk_reader.read_log())        
+        except asyncio.TimeoutError:
+            LOGGER.error("Timeout getting camera image from %s", self.name)
+
+    async def _async_get_fwiot(self) -> dict[str, Any]:
         url = 'https://iot.frontware.com/json/%s.json?lastid=20&limit=20' % self._device._key
         
         websession = async_get_clientsession(self.hass)
@@ -99,9 +127,14 @@ class FWIOTSystem:
         self.devices = {}
         ''' serial devices '''
 
-    def check_finger(self, ip):
-        if ip != '192.168.1.65':
-           raise Exception(5,'Error connect: code %s' % ip)
+    def check_finger(self, ip, port):
+        fk_reader = finger_reader()
+        fk_reader.port = port
+        fk_reader.host = ip
+
+        emp = fk_reader.read_user()
+        if len(emp) == 0:
+           raise Exception(5,'Error connect to %s' % ip)
 
         if ip in self.devices:
            raise Exception(2,'IP already exist')
@@ -110,6 +143,8 @@ class FWIOTSystem:
             'device_type_code': 'FINGER',
             'device_type_name': 'Fingerprint',
             'token': ip,
+            'port': port,
+            'emps': emp,
             'serial':ip}, ip)
         return ip   
 

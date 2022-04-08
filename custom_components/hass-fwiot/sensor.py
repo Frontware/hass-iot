@@ -19,7 +19,7 @@ from homeassistant.components.sensor import (
     SensorEntity,
     SensorStateClass,
 )
-from .const import DOMAIN, DEVICE_EMPDETECTOR, DEVICE_THERMIDITY
+from .const import DEVICE_FINGER, DOMAIN, DEVICE_EMPDETECTOR, DEVICE_THERMIDITY
 from . import async_add_sensors
 from .fwiot import FWIOTDevice, FWIOTEntity
 
@@ -41,6 +41,11 @@ def add_sensor_fn(device, rets):
     elif device.type == DEVICE_THERMIDITY:
        rets.append(FWIOTTemperature(device))
        rets.append(FWIOTHumudity(device))
+    elif device.type == DEVICE_FINGER:
+        for each in device._raw.get('emps', {}):
+            n = device._raw.get('emps', {})[each]
+            if n:
+               rets.append(FWBiometricEmployeeName(device, n, each))
 
 class FWIOTEmployeeUpdate(FWIOTEntity):
     
@@ -131,3 +136,21 @@ class FWIOTHumudity(FWIOTEntity):
 
     async def async_update(self):
         self._hum = self.coordinator.data.get('data', {}).get('hum', 0)
+
+class FWBiometricEmployeeName(FWIOTEntity):
+
+    device_class = DEVICE_CLASS_TIMESTAMP
+
+    """A fingerprint implementation for device."""
+    def __init__(self, device: FWIOTDevice, emp: str, empid: str) -> None:
+        super().__init__(device)
+        self._attr_unique_id = f"{self._device.unique_id}_b_{empid}"
+        self._attr_name = f" {emp}"
+
+    @property
+    def state(self):
+        """Return"""
+        return 1
+
+    async def async_update(self):
+        pass
