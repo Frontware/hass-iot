@@ -12,7 +12,7 @@ from homeassistant.core import HomeAssistant, callback
 
 from .const import DOMAIN,\
                    FIELD_API, FIELD_TYPE, FIELD_IP, FIELD_PORT,\
-                   FIELD_TZ,\
+                   FIELD_TZ, FIELD_UPDATE_EVERY,\
                    FLOWTYPE_FINGER, FLOWTYPE_IOT
 from .fwiot import FWIOTSystem, FWIOTDataUpdateCoordinator
 
@@ -199,7 +199,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 ks = {user_input.get(FIELD_IP):{
                     'type':'finger',
                     'port': user_input.get(FIELD_PORT),
-                    'tz': user_input.get(FIELD_TZ)
+                    'tz': user_input.get(FIELD_TZ),
+                    'every': user_input.get(FIELD_UPDATE_EVERY)
                 }}
 
                 return self.async_create_entry(title='Devices', data={"keys":ks})
@@ -222,7 +223,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="finger", data_schema=vol.Schema({
                 vol.Required(FIELD_IP): str, 
                 vol.Required(FIELD_PORT): int, 
-                vol.Required(FIELD_TZ,default='Asia/Bangkok'): str
+                vol.Required(FIELD_TZ,default='Asia/Bangkok'): str,
+                vol.Required(FIELD_UPDATE_EVERY,default=5): int,
             }), errors=errors
         )
     @staticmethod
@@ -336,7 +338,9 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 ks = self.config_entry.data.get('keys', {})
                 ks[user_input.get(FIELD_IP)]={
                     'type':'finger',
-                    'port': user_input.get(FIELD_PORT)
+                    'port': user_input.get(FIELD_PORT),
+                    'tz': user_input.get(FIELD_TZ),
+                    'every': user_input.get(FIELD_UPDATE_EVERY)
                 }
 
                 return self.async_create_entry(title='Devices', data={"keys":ks})
@@ -361,5 +365,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             step_id="finger", data_schema=vol.Schema({
                 vol.Required(FIELD_IP): str, 
                 vol.Required(FIELD_PORT): int, 
-                vol.Required(FIELD_TZ,default='Asia/Bangkok'): str}), errors=errors
+                vol.Required(FIELD_TZ,default='Asia/Bangkok'): str,
+                vol.Required(FIELD_UPDATE_EVERY,default=5): int,
+            }), errors=errors
         )

@@ -42,7 +42,6 @@ def add_sensor_fn(device, rets):
        rets.append(FWIOTTemperature(device))
        rets.append(FWIOTHumudity(device))
     elif device.type == DEVICE_FINGER:
-        rets.append(FWBiometricLastCrawl(device))
         for each in device._raw.get('emps', {}):
             n = device._raw.get('emps', {})[each]
             if n:
@@ -162,21 +161,3 @@ class FWBiometricEmployeeName(FWIOTEntity):
         self._last = pytz.timezone( self._device._tz or 'Asia/Bangkok').localize(
             datetime.datetime.strptime(self.coordinator.data.get(self._emp, {}), '%d/%m/%Y %H:%M:%S'),is_dst=None
         ).astimezone(pytz.utc).timestamp()
-
-class FWBiometricLastCrawl(FWIOTEntity):
-
-    device_class = DEVICE_CLASS_TIMESTAMP
-
-    """A fingerprint implementation for device."""
-    def __init__(self, device: FWIOTDevice) -> None:
-        super().__init__(device)
-        self._attr_unique_id = f"{self._device.unique_id}_last_c"
-        self._attr_name = "last connect"
-
-    @property
-    def state(self):
-        """Return"""
-        return datetime.datetime.fromtimestamp(self._device._last_connect,tz=pytz.UTC) if self._device._last_connect else None
-
-    async def async_update(self):
-        pass
