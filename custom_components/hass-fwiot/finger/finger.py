@@ -38,7 +38,7 @@ class finger_reader():
             i += 1
             v6.read_log(1024, d61, i, d63)
         
-        return v6.emps
+        return v6.emps.tojson()
 
 
     def read_user(self):

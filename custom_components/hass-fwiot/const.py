@@ -49,6 +49,7 @@ FIELD_TYPE ="type"
 FIELD_API ="api_key"
 FIELD_IP ="finger_print_ip"
 FIELD_PORT ="finger_print_port"
+FIELD_TZ = "finger_print_tz"
 
 ATTR_DEVICE_NAME = "device_name"
 ATTR_DEVICE_TYPE = "device_type"

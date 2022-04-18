@@ -39,8 +39,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
            if tt == 'iot': 
               await hass.async_add_executor_job(fwsys.get_device, each)
            else:
-              pp = entry.data.get('keys')[each]['port'] 
-              await hass.async_add_executor_job(fwsys.check_finger, each, pp)  
+              pp = entry.data.get('keys')[each]['port']
+              tz = entry.data.get('keys')[each].get('tz','')
+              await hass.async_add_executor_job(fwsys.check_finger, each, pp, tz)  
 
     for each in fwsys.devices:
         fwsys.devices[each].coordinator = fwiot.FWIOTDataUpdateCoordinator(hass, fwsys.devices[each])

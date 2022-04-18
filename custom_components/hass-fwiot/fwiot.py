@@ -53,28 +53,28 @@ class FWIOTDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Update data via library."""
 
         if self._device.type == DEVICE_FINGER:
-           return self._async_get_finger() 
+           return await self._async_get_finger() 
         else:
-           return self._async_get_fwiot()
+           return await self._async_get_fwiot()
 
     async def _async_get_finger(self) -> dict[str, Any]:
-        print(self._device._raw.get('port', 0))
-        print(self._device._raw.get('serial', 0))
-        if self._device._raw.get('port', 0):
+        if not self._device._raw.get('port', 0):
            return
-        if self._device._raw.get('serial', ''):
+        if not self._device._raw.get('serial', ''):
            return
+
+        if datetime.datetime.now().timestamp() < self._device._last_connect + (5 * 60):
+           return {}
 
         fk_reader = finger_reader()
         fk_reader.port = self._device._raw.get('port',0)
         fk_reader.host = self._device._raw.get('serial','')
 
         fk_reader.mode = 'new'
-        try:
-            async with async_timeout.timeout(10):
-                print(await fk_reader.read_log())        
-        except asyncio.TimeoutError:
-            LOGGER.error("Timeout getting camera image from %s", self.name)
+        r = fk_reader.read_log()
+        # finish read
+        self._device._last_connect = datetime.datetime.now().timestamp()
+        return r
 
     async def _async_get_fwiot(self) -> dict[str, Any]:
         url = 'https://iot.frontware.com/json/%s.json?lastid=20&limit=20' % self._device._key
@@ -127,7 +127,7 @@ class FWIOTSystem:
         self.devices = {}
         ''' serial devices '''
 
-    def check_finger(self, ip, port):
+    def check_finger(self, ip, port, tz):
         fk_reader = finger_reader()
         fk_reader.port = port
         fk_reader.host = ip
@@ -141,7 +141,9 @@ class FWIOTSystem:
 
         self.devices[ip] = FWIOTDevice(self, {
             'device_type_code': 'FINGER',
-            'device_type_name': 'Fingerprint',
+            'device_type_name': 'Fingerprint BM10',
+            'manu': '5YOA',
+            'tz': tz,
             'token': ip,
             'port': port,
             'emps': emp,
@@ -182,6 +184,9 @@ class FWIOTDevice:
         self._type = device.get('device_type_code')
         self._typename = device.get('device_type_name')
         self.inited = False
+        self.manu = device.get('manu','')
+        self._tz =  device.get('tz','')
+        self._last_connect = 0
 
     @property
     def type(self):
@@ -249,7 +254,7 @@ class FWIOTEntity(CoordinatorEntity, Entity):
         """Return device registry information for this entity."""
         return DeviceInfo(
             identifiers={(DOMAIN, self._device.unique_id)},
-            manufacturer="Frontware IOT" if self._device.type != DEVICE_FINGER else '',
+            manufacturer="Frontware IOT" if self._device.type != DEVICE_FINGER else self._device.manu,
             model=self._device.model,
             name=self._device.name,
             sw_version=self._device.version

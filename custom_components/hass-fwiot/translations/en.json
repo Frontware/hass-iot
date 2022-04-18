@@ -15,17 +15,19 @@
         }
       },
       "finger": {
-        "title": "Setup Frontware FingerPrint",
+        "title": "Setup FingerPrint 5YOA BM10",
         "description": "Enter your fingerprint IP address",
         "data": {
           "finger_print_ip": "NNN.NNN.NNN.NNN",
-          "finger_print_port": "Port"
+          "finger_print_port": "Port",
+          "finger_print_tz": "Timezone"
         }
       }
     },
     "error": {
       "not_implement": "this device type has not implement",
       "invalid_api": "Invalid api key",
+      "invalid_tz":  "Invalid timezone",
       "invalid_ip": "Invalid machine IP address",
       "invalid_port": "Invalid machine port",
       "cannot_connect": "Failed to get status from iot server",
@@ -54,11 +56,12 @@
         }
       },
       "finger": {
-        "title": "Setup Frontware FingerPrint",
+        "title": "Setup FingerPrint 5YOA BM10",
         "description": "Enter your fingerprint IP address",
         "data": {
           "finger_print_ip": "NNN.NNN.NNN.NNN",
-          "finger_print_port": "Port"
+          "finger_print_port": "Port",
+          "finger_print_tz": "Timezone"
         }
       }
     },
@@ -66,6 +69,7 @@
       "invalid_api": "Invalid api key",
       "invalid_ip": "Invalid machine IP address",
       "invalid_port": "Invalid machine port",
+      "invalid_tz":  "Invalid timezone",
       "not_implement": "this device has not implement",
       "cannot_connect": "Failed to get status from iot server",
       "cannot_connectf": "Failed to get data from fingerprint",

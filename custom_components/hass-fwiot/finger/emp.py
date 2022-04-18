@@ -36,3 +36,12 @@ class finger_emp():
               st += stc + '%s : %s, last log = %s' % (lastrec.user or '000', len(emplogs), lastrec.time)
               stc = '\n'
           return st    
+      
+      def tojson(self):
+          ret = {}
+          self.ids.sort()
+          for each in self.ids:
+              emplogs = self.data[each]['logs']
+              lastrec = emplogs[-1:][0]
+              ret[lastrec.user or '000'] = '%s:%s' % (lastrec.time, lastrec.second)
+          return ret  

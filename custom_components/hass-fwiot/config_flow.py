@@ -5,12 +5,14 @@ import logging
 from typing import Any
 
 import voluptuous as vol
+import pytz
 
 from homeassistant import config_entries, exceptions
 from homeassistant.core import HomeAssistant, callback
 
 from .const import DOMAIN,\
                    FIELD_API, FIELD_TYPE, FIELD_IP, FIELD_PORT,\
+                   FIELD_TZ,\
                    FLOWTYPE_FINGER, FLOWTYPE_IOT
 from .fwiot import FWIOTSystem, FWIOTDataUpdateCoordinator
 
@@ -93,13 +95,18 @@ async def validate_finger_ip(hass: HomeAssistant, data: dict) -> dict[str, Any]:
     if not data.get(FIELD_PORT,0):
        raise ErrorInvalidPort 
 
+    try:
+       tt = pytz.timezone(data.get(FIELD_TZ)) 
+    except:
+       raise ErrorInvalidTZ 
+
     if not DOMAIN in hass.data:
        hass.data[DOMAIN] = FWIOTSystem(hass)
     
     fwsys:FWIOTSystem = hass.data[DOMAIN]   
     try:
         ss = await hass.async_add_executor_job(
-            fwsys.check_finger, data[FIELD_IP], data[FIELD_PORT]
+            fwsys.check_finger, data[FIELD_IP], data[FIELD_PORT], data[FIELD_TZ]
         )
         fwsys.devices[ss].coordinator = FWIOTDataUpdateCoordinator(hass, fwsys.devices[ss])
         await fwsys.devices[ss].coordinator.async_config_entry_first_refresh()
@@ -191,7 +198,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
                 ks = {user_input.get(FIELD_IP):{
                     'type':'finger',
-                    'port': user_input.get(FIELD_PORT)
+                    'port': user_input.get(FIELD_PORT),
+                    'tz': user_input.get(FIELD_TZ)
                 }}
 
                 return self.async_create_entry(title='Devices', data={"keys":ks})
@@ -199,6 +207,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "invalid_ip"
             except ErrorInvalidPort:
                 errors["base"] = "invalid_port"
+            except ErrorInvalidTZ:
+                errors["base"] = "invalid_tz"
             except ErrorCannotConnectFinger:
                 errors["base"] = "cannot_connectf"
             except ErrorDeviceAlreadyExist:
@@ -209,7 +219,11 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         # If there is no user input or there were errors, show the form again, including any errors that were found with the input.
         return self.async_show_form(
-            step_id="finger", data_schema=vol.Schema({(FIELD_IP): str, (FIELD_PORT): int}), errors=errors
+            step_id="finger", data_schema=vol.Schema({
+                vol.Required(FIELD_IP): str, 
+                vol.Required(FIELD_PORT): int, 
+                vol.Required(FIELD_TZ,default='Asia/Bangkok'): str
+            }), errors=errors
         )
     @staticmethod
     @callback
@@ -239,6 +253,9 @@ class ErrorInvalidPort(exceptions.HomeAssistantError):
 
 class ErrorCannotConnectFinger(exceptions.HomeAssistantError):
     """Error to indicate we cannot connect fingerprint."""
+
+class ErrorInvalidTZ(exceptions.HomeAssistantError):
+    """Error to indicate invalid timezone."""
 
 class OptionsFlowHandler(config_entries.OptionsFlow):
     def __init__(self, config_entry: config_entries.ConfigEntry):
@@ -327,6 +344,8 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 errors["base"] = "invalid_ip"
             except ErrorInvalidPort:
                 errors["base"] = "invalid_port"
+            except ErrorInvalidTZ:
+                errors["base"] = "invalid_tz"
             except ErrorCannotConnect:
                 errors["base"] = "cannot_connect"
             except ErrorDeviceAlreadyExist:
@@ -339,5 +358,8 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
         # If there is no user input or there were errors, show the form again, including any errors that were found with the input.
         return self.async_show_form(
-            step_id="finger", data_schema=vol.Schema({(FIELD_IP): str, (FIELD_PORT): int}), errors=errors
+            step_id="finger", data_schema=vol.Schema({
+                vol.Required(FIELD_IP): str, 
+                vol.Required(FIELD_PORT): int, 
+                vol.Required(FIELD_TZ,default='Asia/Bangkok'): str}), errors=errors
         )
