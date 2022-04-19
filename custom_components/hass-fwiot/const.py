@@ -45,12 +45,17 @@ KEY_DEVICE = "device"
 FLOWTYPE_IOT = "IOT device"
 FLOWTYPE_FINGER = "Fingerprint"
 
+MODETYPE_ADD = "Add new device"
+MODETYPE_CHANGE = "Change device settings"
+
 FIELD_TYPE ="type"
 FIELD_API ="api_key"
 FIELD_IP ="finger_print_ip"
 FIELD_PORT ="finger_print_port"
 FIELD_TZ = "finger_print_tz"
 FIELD_UPDATE_EVERY = "update_every"
+FIELD_MODE ="mode"
+FIELD_QUERY ="query"
 
 ATTR_DEVICE_NAME = "device_name"
 ATTR_DEVICE_TYPE = "device_type"

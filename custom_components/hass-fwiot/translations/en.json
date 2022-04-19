@@ -1,7 +1,7 @@
 {
   "config": {
     "step": {
-      "user": {
+      "device": {
         "title": "Setup Frontware HASS Device",
         "data": {
           "type": "Select device type"
@@ -43,7 +43,7 @@
   },
   "options": {
     "step": {
-      "user": {
+      "device": {
         "title": "Setup Frontware HASS Device",
         "data": {
           "type": "Select device type"
@@ -65,9 +65,29 @@
           "finger_print_tz": "Timezone",
           "update_every":"Update data every x (minute)"
         }
+      },
+      "mode": {
+        "title": "Setup Frontware HASS Device",
+        "description": "Do you want to?"
+      },
+      "find": {
+        "title": "Setup Frontware HASS Device",
+        "description": "Search your device by",
+        "data": {
+          "query": "Fingerprint IP address/Frontware IOT serial"
+        }
+      },
+      "finger_update": {
+        "title": "Setup FingerPrint 5YOA BM10",
+        "description": "change settings of fingerprint at {ip}:{port}",
+        "data": {
+          "finger_print_tz": "Timezone",
+          "update_every":"Update data every x (minute)"
+        }
       }
     },
     "error": {
+      "device_notfound": "Device not found",
       "invalid_api": "Invalid api key",
       "invalid_ip": "Invalid machine IP address",
       "invalid_port": "Invalid machine port",

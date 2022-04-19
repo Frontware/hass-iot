@@ -202,8 +202,12 @@ class FWIOTDevice:
         self._tz =  device.get('tz','')
         self._last_connect = 0
         ''' last time connect to server to get data '''
-        self._every = device.get('update','')
+        self._every = 5
         ''' update every 5 minutes '''
+        try:
+            self._every = int(device.get('update','5'))
+        except:
+            pass            
 
     @property
     def type(self):
