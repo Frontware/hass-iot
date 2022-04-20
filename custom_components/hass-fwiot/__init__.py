@@ -34,7 +34,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
        hass.data[DOMAIN] = fwsys
 
     for each in entry.data.get('keys'):        
-        tt = entry.data.get('keys')[each]['type']
+        tt = entry.data.get('keys').get(each,{}).get('type','')
         if not each in fwsys.devices:
            if tt == 'iot': 
               await hass.async_add_executor_job(fwsys.get_device, each)
