@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from pydoc import describe
 from typing import Any
 
 import voluptuous as vol
@@ -50,10 +51,14 @@ async def validate_api(hass: HomeAssistant, data: dict) -> dict[str, Any]:
     
     fwsys:FWIOTSystem = hass.data[DOMAIN]   
 
+    ss = None
+    tk = None
     try:
-        ss = await hass.async_add_executor_job(
+        s = await hass.async_add_executor_job(
             fwsys.get_device, data[FIELD_API]
         )
+        ss = s.get('serial')        
+        tk = s.get('token')
         fwsys.devices[ss].coordinator = FWIOTDataUpdateCoordinator(hass, fwsys.devices[ss])
         await fwsys.devices[ss].coordinator.async_config_entry_first_refresh()
 
@@ -71,7 +76,7 @@ async def validate_api(hass: HomeAssistant, data: dict) -> dict[str, Any]:
     # "Title" is what is displayed to the user for this hub device
     # It is stored internally in HA as part of the device config.
     # See `async_step_user` below for how this is used
-    return
+    return tk
 
 async def validate_finger_ip(hass: HomeAssistant, data: dict) -> dict[str, Any]:
     ''' validate ip address, port, timezone '''
@@ -119,7 +124,7 @@ async def validate_finger_update(hass: HomeAssistant, data: dict) -> dict[str, A
     
     return
 
-async def form_choose_device(cf, user_input):
+async def form_choose_device(cf, user_input=None):
     ''' [flow:user] choose iot/finger '''
     if user_input is None:
                 return cf.async_show_form(
@@ -138,18 +143,39 @@ async def form_choose_device(cf, user_input):
        return await cf.async_step_finger()
     return await cf.async_step_iot()
 
-async def form_device_add_iot(cf, user_input):
+async def form_device_add_iot(cf, user_input=None):
     ''' [flow:iot] add iot device '''      
     errors = {}
     if user_input is not None:
         try:
-            await validate_api(cf.hass, user_input)
+            ss = await validate_api(cf.hass, user_input)
 
-            ks = {user_input.get(FIELD_API):{
-                'type':'iot'
-            }}
+            try:
+                ks = cf.config_entry.data.get('keys', None)
+            except:
+                ks = None
+            
+            dt = {
+                    'type':'iot',
+                    'token': ss,
+                    'every': user_input.get(FIELD_UPDATE_EVERY)
+                }
+            # exist    
+            if ks:
+               ks[user_input.get(FIELD_API)] = dt
 
-            return cf.async_create_entry(title='Devices', data={"keys":ks})
+               cf.hass.config_entries.async_update_entry(
+                    cf.config_entry, data={"keys":ks}
+               )
+               cf.hass.async_create_task(
+                  cf.hass.config_entries.async_reload(cf.config_entry.entry_id)
+               )
+               return cf.async_abort(reason="add_successful",
+                    description_placeholders={'device': ss})
+            else:
+                ks = {user_input.get(FIELD_API): dt}
+
+                return cf.async_create_entry(title='Devices', data={"keys":ks})
         except ErrorCannotConnect:
             errors["base"] = "cannot_connect"
         except ErrorDeviceAlreadyExist:
@@ -170,25 +196,46 @@ async def form_device_add_iot(cf, user_input):
     
     # If there is no user input or there were errors, show the form again, including any errors that were found with the input.
     return cf.async_show_form(
-        step_id="iot", data_schema=vol.Schema({(FIELD_API): str}), errors=errors
+        step_id="iot", data_schema=vol.Schema({
+                vol.Required(FIELD_API): str, 
+                vol.Required(FIELD_UPDATE_EVERY,default=5): int,
+            }), errors=errors
     )
 
-async def form_device_add_finger(cf, user_input):
+async def form_device_add_finger(cf, user_input=None):
         ''' [flow:finger] add fingerprint '''
         errors = {}
         if user_input is not None:
             
             try:
                 await validate_finger_ip(cf.hass, user_input)
+                dt = {
+                        'type':'finger',
+                        'port': user_input.get(FIELD_PORT),
+                        'tz': user_input.get(FIELD_TZ),
+                        'every': user_input.get(FIELD_UPDATE_EVERY)
+                   }
+                try:
+                    ks = cf.config_entry.data.get('keys', None)
+                except:
+                    ks = None
+                # exist    
+                if ks:
+                   ks[user_input.get(FIELD_IP)]=dt
 
-                ks = {user_input.get(FIELD_IP):{
-                    'type':'finger',
-                    'port': user_input.get(FIELD_PORT),
-                    'tz': user_input.get(FIELD_TZ),
-                    'every': user_input.get(FIELD_UPDATE_EVERY)
-                }}
+                   cf.hass.config_entries.async_update_entry(
+                            cf.config_entry, data={"keys":ks}
+                   )
+                   cf.hass.async_create_task(
+                        cf.hass.config_entries.async_reload(cf.config_entry.entry_id)
+                   )
+                   return cf.async_abort(reason="add_successful",
+                            description_placeholders={'device': '%s:%s' % (user_input.get(FIELD_IP), user_input.get(FIELD_PORT))})
+                else:
+                   ks = {user_input.get(FIELD_IP):dt}
 
-                return cf.async_create_entry(title='Devices', data={"keys":ks})
+                   return cf.async_create_entry(title='Devices', data={"keys":ks})
+
             except ErrorInvalidIP:
                 errors["base"] = "invalid_ip"
             except ErrorInvalidPort:
@@ -213,7 +260,7 @@ async def form_device_add_finger(cf, user_input):
             }), errors=errors
         )
 
-async def form_mode(cf, user_input):
+async def form_mode(cf, user_input=None):
     ''' [flow:mode] mode add / change '''
     if user_input is None:
             return cf.async_show_form(
@@ -229,10 +276,10 @@ async def form_mode(cf, user_input):
             )
 
     if user_input[FIELD_MODE] == MODETYPE_ADD:
-        return await cf.async_step_add()
+        return await cf.async_step_device()
     return await cf.async_step_find()
 
-async def form_find(cf, user_input):
+async def form_find(cf, user_input=None):
     ''' [flow:find] search device '''
     errors = {}
     if user_input is not None:
@@ -241,9 +288,23 @@ async def form_find(cf, user_input):
         if not user_input[FIELD_QUERY] in ks:
             errors["base"] = "device_notfound"
         else:
-            ks[user_input[FIELD_QUERY]]['ip'] = user_input[FIELD_QUERY]
-            cf.context['u-'+cf.flow_id] = user_input[FIELD_QUERY]
-            return await cf.async_step_finger_update()
+            dt = ks[user_input[FIELD_QUERY]]
+            dc = {
+                'key': user_input[FIELD_QUERY],
+                'dt': dt
+            }
+    
+            if dt.get('type') == 'finger':
+               dc['device'] = '%s:%s' % (user_input[FIELD_QUERY],dt.get('port'))
+            else:
+               dc['device'] = dt.get('token') 
+
+            cf.context['u-'+cf.flow_id] = dc
+
+            if dt.get('type') == 'finger':
+               return await cf.async_step_finger_update()
+            else:
+               return await cf.async_step_iot_update() 
 
     return cf.async_show_form(
         step_id="find",
@@ -255,20 +316,27 @@ async def form_find(cf, user_input):
 async def form_update_finger(cf, user_input=None):
         ''' [flow:finger_update] update finger print '''
         errors = {}
-        dt = (user_input or {}).get('dt', {})
-        print(cf.context)
+        ctx = cf.context.get('u-'+cf.flow_id, {})
+        dt = ctx.get('dt', {})
         if user_input is not None:
            try: 
-                validate_finger_update(cf, user_input)
+                await validate_finger_update(cf, user_input)
 
-                # ks = cf.config_entry.data.get('keys', {})
-                # ks[dt.get('ip')]['tz'] = user_input[FIELD_TZ]
-                # ks[dt.get('ip')]['every'] = user_input[FIELD_UPDATE_EVERY]
+                ks = cf.config_entry.data.get('keys', None)
+                ks[ctx['key']]['every'] = user_input[FIELD_UPDATE_EVERY]
+                ks[ctx['key']]['tz'] = user_input[FIELD_TZ]   
 
-                # cf.hass.config_entries.async_update_entry(
-                #     cf,data={"keys":ks},
-                # )
-                return cf.async_abort(reason="updated successful")
+                cf.hass.config_entries.async_update_entry(
+                     cf.config_entry,data={'keys': ks}
+                )
+                
+                cf.hass.async_create_task(
+                    cf.hass.config_entries.async_reload(cf.config_entry.entry_id)
+                )
+
+                return cf.async_abort(
+                    reason="updated_successful", 
+                    description_placeholders={'device': ctx.get('device', '')})
 
            except ErrorInvalidTZ:
                 errors["base"] = "invalid_tz"
@@ -279,9 +347,44 @@ async def form_update_finger(cf, user_input=None):
         # If there is no user input or there were errors, show the form again, including any errors that were found with the input.
         return cf.async_show_form(
             step_id="finger_update", 
-            description_placeholders={'ip': dt.get('ip'),'port': dt.get('port')},
+            description_placeholders={'device': ctx.get('device', '')},
             data_schema=vol.Schema({
                 vol.Required(FIELD_TZ,default=dt.get('tz')): str,
+                vol.Required(FIELD_UPDATE_EVERY,default=dt.get('every', 5)): int,
+            }), errors=errors
+        )
+
+async def form_update_iot(cf, user_input=None):
+        ''' [flow:iot_update] update finger print '''
+        errors = {}
+        ctx = cf.context.get('u-'+cf.flow_id, {})
+        dt = ctx.get('dt', {})
+        if user_input is not None:
+           try: 
+
+                ks = cf.config_entry.data.get('keys', None)
+                ks[ctx['key']]['every'] = user_input[FIELD_UPDATE_EVERY]
+
+                cf.hass.config_entries.async_update_entry(
+                     cf.config_entry,data={'keys': ks}
+                )
+                
+                cf.hass.async_create_task(
+                    cf.hass.config_entries.async_reload(cf.config_entry.entry_id)
+                )
+                return cf.async_abort(
+                    reason="updated_successful", 
+                    description_placeholders={'device': ctx.get('device','')})
+
+           except Exception:  # pylint: disable=broad-except
+               _LOGGER.exception("Unexpected exception")
+               errors["base"] = "unknown"
+
+        # If there is no user input or there were errors, show the form again, including any errors that were found with the input.
+        return cf.async_show_form(
+            step_id="iot_update", 
+            description_placeholders={'device': ctx.get('device','')},
+            data_schema=vol.Schema({
                 vol.Required(FIELD_UPDATE_EVERY,default=dt.get('every', 5)): int,
             }), errors=errors
         )
@@ -296,11 +399,11 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     # changes.
     CONNECTION_CLASS = config_entries.CONN_CLASS_LOCAL_PUSH
 
-    async def async_step_init(self, user_input=None):
+    async def async_step_user(self, user_input=None):
         return await self.async_step_device(user_input)
 
     async def async_step_device(self, user_input=None):  
-        return await form_choose_device(user_input)
+        return await form_choose_device(self, user_input)
 
     async def async_step_iot(self, user_input=None):  
         return await form_device_add_iot(self, user_input)
@@ -353,7 +456,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_find(self, user_input=None):
         return await form_find(self, user_input)
 
-    async def async_step_add(self, user_input=None):
+    async def async_step_device(self, user_input=None):
         return await form_choose_device(self, user_input)
 
     async def async_step_iot(self, user_input=None):     
@@ -364,3 +467,6 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
     async def async_step_finger_update(self, user_input=None):
         return await form_update_finger(self, user_input)
+
+    async def async_step_iot_update(self, user_input=None):
+        return await form_update_iot(self, user_input)

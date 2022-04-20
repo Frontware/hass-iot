@@ -163,7 +163,10 @@ class FWIOTSystem:
         return ip   
 
     def get_device(self, api_key):
-        ''' get device status '''
+        ''' get device status
+
+        return serial
+        '''
         
         url = 'https://iot.frontware.com/status/%s' % api_key
         r = requests.get(url)
@@ -183,7 +186,7 @@ class FWIOTSystem:
            raise Exception(4, 'no serial found') 
 
         self.devices[rr.get('serial')] = FWIOTDevice(self, rr, api_key)
-        return rr.get('serial')
+        return rr
 
 class FWIOTDevice:
     def __init__(self, sys: FWIOTSystem, device: any, api_key: any) -> None:
